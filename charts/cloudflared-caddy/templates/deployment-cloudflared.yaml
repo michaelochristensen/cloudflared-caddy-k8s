@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.cloudflared.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudflared-caddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.cloudflared.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cloudflared-caddy.selectorLabelsCloudflared" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudflared-caddy.selectorLabelsCloudflared" . | nindent 8 }}
+    spec:
+      containers:
+        - name: cloudflared
+          image: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
+          imagePullPolicy: {{ .Values.cloudflared.image.pullPolicy }}
+          args:
+            {{- toYaml .Values.cloudflared.args | nindent 12 }}
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cloudflared.tokenSecretName }}
+                  key: token
+          securityContext:
+            {{- toYaml .Values.cloudflared.securityContext | nindent 12 }}

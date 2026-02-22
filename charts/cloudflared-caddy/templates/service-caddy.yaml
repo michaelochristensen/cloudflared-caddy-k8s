@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.caddy.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudflared-caddy.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.caddy.service.type }}
+  selector:
+    {{- include "cloudflared-caddy.selectorLabelsCaddy" . | nindent 4 }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.caddy.service.port }}
+      targetPort: {{ .Values.caddy.service.targetPort }}

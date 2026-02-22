@@ -1,0 +1,65 @@
+nameOverride: ""
+fullnameOverride: ""
+
+caddy:
+  name: caddy
+  replicaCount: 1
+  image:
+    repository: caddy
+    tag: "2"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  configMapName: caddyfile-config
+  caddyfile: |
+    :80 {
+      root * /srv
+      file_server
+      respond /healthz 200
+    }
+  teslaKeySecretName: tesla-key-secret
+  teslaPublicKey: ""
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  readinessProbe:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  livenessProbe:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 20
+
+cloudflared:
+  name: cloudflared
+  replicaCount: 1
+  image:
+    repository: cloudflare/cloudflared
+    tag: latest
+    pullPolicy: IfNotPresent
+  args:
+    - tunnel
+    - --no-autoupdate
+    - run
+  tokenSecretName: cloudflared-token
+  token: ""
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+secrets:
+  create: false

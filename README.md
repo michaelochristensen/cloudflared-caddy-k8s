@@ -1,15 +1,34 @@
 # cloudflared-caddy-k8s
 
-Kubernetes manifests to run `cloudflared` tunnel and `caddy` in-cluster.
+Helm chart + Argo CD `Application` to run `cloudflared` tunnel and `caddy` in-cluster.
 
-## Deploy
+## Repository layout
+
+- `charts/cloudflared-caddy`: Helm chart for `caddy` + `cloudflared`
+- `argocd-application.yaml`: Argo CD `Application` to deploy this chart
+
+## Prerequisites
+
+Create required secrets in the target namespace (`cloudflared`) before syncing Argo CD:
 
 ```bash
-kubectl apply -f cloudflared-k8s.yaml
+kubectl create namespace cloudflared
+kubectl -n cloudflared create secret generic cloudflared-token \
+  --from-literal=token='<YOUR_CLOUDFLARE_TUNNEL_TOKEN>'
+kubectl -n cloudflared create secret generic tesla-key-secret \
+  --from-file=com.tesla.3p.public-key.pem=./com.tesla.3p.public-key.pem
 ```
 
-## Required edits
+By default, chart value `secrets.create=false` so external secrets are expected.
 
-Update placeholders in `cloudflared-k8s.yaml` before applying:
-- `REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN`
-- `REPLACE_WITH_YOUR_PUBLIC_KEY`
+## Deploy with Argo CD
+
+```bash
+kubectl apply -f argocd-application.yaml
+```
+
+Argo CD will deploy from:
+
+- `repoURL`: `https://github.com/michaelochristensen/cloudflared-caddy-k8s.git`
+- `path`: `charts/cloudflared-caddy`
+- `namespace`: `cloudflared`

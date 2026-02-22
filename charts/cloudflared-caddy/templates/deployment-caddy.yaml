@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.caddy.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudflared-caddy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.caddy.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cloudflared-caddy.selectorLabelsCaddy" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudflared-caddy.selectorLabelsCaddy" . | nindent 8 }}
+    spec:
+      {{- with .Values.caddy.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: caddy
+          image: "{{ .Values.caddy.image.repository }}:{{ .Values.caddy.image.tag }}"
+          imagePullPolicy: {{ .Values.caddy.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.caddy.service.targetPort }}
+          volumeMounts:
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+            - name: tesla-key
+              mountPath: /srv/.well-known/appspecific/com.tesla.3p.public-key.pem
+              subPath: com.tesla.3p.public-key.pem
+              readOnly: true
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.caddy.readinessProbe.path }}
+              port: {{ .Values.caddy.service.targetPort }}
+            initialDelaySeconds: {{ .Values.caddy.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.caddy.readinessProbe.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.caddy.livenessProbe.path }}
+              port: {{ .Values.caddy.service.targetPort }}
+            initialDelaySeconds: {{ .Values.caddy.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.caddy.livenessProbe.periodSeconds }}
+          securityContext:
+            {{- toYaml .Values.caddy.securityContext | nindent 12 }}
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: {{ .Values.caddy.configMapName }}
+            items:
+              - key: Caddyfile
+                path: Caddyfile
+        - name: tesla-key
+          secret:
+            secretName: {{ .Values.caddy.teslaKeySecretName }}
+            items:
+              - key: com.tesla.3p.public-key.pem
+                path: com.tesla.3p.public-key.pem
+        - name: caddy-data
+          emptyDir: {}
+        - name: caddy-config
+          emptyDir: {}
