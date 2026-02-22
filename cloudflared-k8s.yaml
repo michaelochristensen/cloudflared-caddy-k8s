@@ -1,0 +1,161 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflared
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddyfile-config
+  namespace: cloudflared
+data:
+  Caddyfile: |
+    :80 {
+      root * /srv
+      file_server
+      respond /healthz 200
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tesla-key-secret
+  namespace: cloudflared
+type: Opaque
+stringData:
+  # Replace with your real key content.
+  com.tesla.3p.public-key.pem: |
+    -----BEGIN PUBLIC KEY-----
+    REPLACE_WITH_YOUR_PUBLIC_KEY
+    -----END PUBLIC KEY-----
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflared-token
+  namespace: cloudflared
+type: Opaque
+stringData:
+  # Replace with your Cloudflare tunnel token.
+  token: REPLACE_WITH_CLOUDFLARE_TUNNEL_TOKEN
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caddy
+  namespace: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: caddy
+  template:
+    metadata:
+      labels:
+        app: caddy
+    spec:
+      containers:
+        - name: caddy
+          image: caddy:2
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+            - name: tesla-key
+              mountPath: /srv/.well-known/appspecific/com.tesla.3p.public-key.pem
+              subPath: com.tesla.3p.public-key.pem
+              readOnly: true
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-config
+              mountPath: /config
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: caddyfile-config
+            items:
+              - key: Caddyfile
+                path: Caddyfile
+        - name: tesla-key
+          secret:
+            secretName: tesla-key-secret
+            items:
+              - key: com.tesla.3p.public-key.pem
+                path: com.tesla.3p.public-key.pem
+        - name: caddy-data
+          emptyDir: {}
+        - name: caddy-config
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy
+  namespace: cloudflared
+spec:
+  selector:
+    app: caddy
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
